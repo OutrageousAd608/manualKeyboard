@@ -1,0 +1,5 @@
+../Drivers/CMSIS/Include/core_cm3.h:1511:22:__NVIC_EnableIRQ	2
+../Core/Src/usb.c:9:6:USB_Hardware_Init	1
+../Core/Src/usb.c:19:6:USB_Core_Init	1
+../Core/Src/usb.c:28:6:USB_LP_CAN1_RX0_IRQHandler	31
+../Core/Src/usb.c:288:6:USB_Send_Keystroke	2

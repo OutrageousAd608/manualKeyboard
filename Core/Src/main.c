@@ -1,71 +1,76 @@
 #include "stm32f1xx.h"
+#include "usb.h"
 
 void SystemClock_Config(void);
-void USB_Hardware_Init(void);
-void LED_Init(void);
+void Buttons_Init(void);
 
 int main(void) {
 
     SystemClock_Config();
-
+    
+    Buttons_Init();
+    
     USB_Hardware_Init();
+    USB_Core_Init();
 
-    LED_Init();
-
-    GPIOC->BSRR = GPIO_BSRR_BR13; // Reset bit turns ON the active-low LED
+    HID_KeyboardReport my_report = {0};
+    
+    uint8_t last_b0_state = 0;
+    uint8_t last_b1_state = 0;
 
     while (1) {
+        uint8_t current_b0 = (GPIOB->IDR & (1 << 0)) ? 1 : 0;
+        uint8_t current_b1 = (GPIOB->IDR & (1 << 1)) ? 1 : 0;
 
+        if (current_b0 != last_b0_state || current_b1 != last_b1_state) {
+            
+            for(int i = 0; i < 6; i++) {
+                my_report.keys[i] = 0;
+            }
+            
+            int key_index = 0;
+
+            if (current_b0) {
+                my_report.keys[key_index++] = 0x15; // 'A' key
+            }
+
+            if (current_b1) {
+                my_report.keys[key_index++] = 0x07; // 'B' key
+            }
+
+            USB_Send_Keystroke(&my_report);
+
+            // Debounce delay
+            for (volatile int i = 0; i < 150000; i++); 
+        }
+
+        last_b0_state = current_b0;
+        last_b1_state = current_b1;
     }
 }
 
 void SystemClock_Config(void) {
-
     RCC->CR |= RCC_CR_HSEON;
-
     while (!(RCC->CR & RCC_CR_HSERDY));
 
-    // Configure Flash prefetch and 2 wait states (required for 72MHz operation)
     FLASH->ACR |= FLASH_ACR_PRFTBE | FLASH_ACR_LATENCY_2;
 
-    // Configure the PLL:
-    // Source = HSE, Multiplier = 9 (8MHz * 9 = 72MHz)
-    // USB Prescaler = 0 (Divide 72MHz by 1.5 = 48MHz)
     RCC->CFGR |= RCC_CFGR_PLLSRC | RCC_CFGR_PLLMULL9;
-    RCC->CFGR &= ~RCC_CFGR_USBPRE;
+    RCC->CFGR &= ~RCC_CFGR_USBPRE; 
 
-    // Enable the PLL
     RCC->CR |= RCC_CR_PLLON;
-    // Wait for PLL to lock
     while (!(RCC->CR & RCC_CR_PLLRDY));
 
-    // Switch System Clock source to the PLL
     RCC->CFGR |= RCC_CFGR_SW_PLL;
-    // Wait until the hardware confirms the switch
     while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL);
 }
 
-void USB_Hardware_Init(void) {
-    // 1. Enable clock for GPIOA (USB D- and D+ are PA11 and PA12)
-    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
-
-    // 2. Enable clock for the USB Peripheral itself
-    RCC->APB1ENR |= RCC_APB1ENR_USBEN;
-
-    // 3. Enable the USB Low Priority Interrupt in the NVIC
-    NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
-}
-
-void LED_Init(void) {
-    // The Blue Pill LED is on PC13
-    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN; // Enable GPIOC clock
-
-    // Configure PC13 as General Purpose Output Push-Pull, max speed 50MHz
-    GPIOC->CRH &= ~GPIO_CRH_MODE13;  // Clear mode
-    GPIOC->CRH &= ~GPIO_CRH_CNF13;   // Clear configuration
-    GPIOC->CRH |= GPIO_CRH_MODE13;   // Set mode to Output 50MHz
-}
-
-void USB_LP_CAN1_RX0_IRQHandler(void) {
-   
+void Buttons_Init(void) {
+    RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
+    
+    GPIOB->CRL &= ~((0xF << 0) | (0xF << 4)); 
+    
+    GPIOB->CRL |= ((0x8 << 0) | (0x8 << 4));
+    
+    GPIOB->ODR &= ~((1 << 0) | (1 << 1)); 
 }
